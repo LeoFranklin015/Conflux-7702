@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Conflux Wallet - Passkey-Secured Web3 Wallet",
-  description: "Secure web3 wallet with passkey authentication, gas sponsorship, and subscription management on Conflux eSpace",
+  title: "Conflux Wallet",
+  description: "Passkey-secured wallet on Conflux eSpace",
 };
 
 export default function RootLayout({
@@ -23,9 +23,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
         {children}
       </body>

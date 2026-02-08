@@ -5,6 +5,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { parseUnits, formatUnits, isAddress, encodeFunctionData, type Address } from 'viem';
 import { TESTNET_TOKENS, SMART_ACCOUNT_ADDRESS, SMART_ACCOUNT_ABI } from '@/lib/viem-client';
 import { RelayerClient, type Call } from '@/lib/relayer-client';
+import { X, Loader2, Check, ExternalLink, ArrowLeft, Plus, AlertTriangle } from 'lucide-react';
 
 const RELAYER_URL = process.env.NEXT_PUBLIC_RELAYER_URL || 'http://localhost:3000';
 const CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '71');
@@ -30,7 +31,6 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Add form state
   const [granteeAddress, setGranteeAddress] = useState('');
   const [granteeLabel, setGranteeLabel] = useState('');
   const [monthlyLimit, setMonthlyLimit] = useState('');
@@ -41,7 +41,6 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
 
   const feeToken = TESTNET_TOKENS.USDT;
 
-  // Load saved subscriptions from localStorage
   const loadSubscriptions = useCallback(async () => {
     setLoading(true);
     try {
@@ -55,7 +54,6 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
       const savedSubs: { granteeAddress: string; label: string }[] = JSON.parse(saved);
       const relayerClient = new RelayerClient(RELAYER_URL, SMART_ACCOUNT_ADDRESS as Address, CHAIN_ID);
 
-      // Fetch on-chain info for each saved subscription
       const subs: Subscription[] = await Promise.all(
         savedSubs.map(async (s) => {
           try {
@@ -96,7 +94,6 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
     loadSubscriptions();
   }, [loadSubscriptions]);
 
-  // Save subscription to localStorage
   const saveSubscription = (grantee: string, label: string) => {
     const saved = localStorage.getItem(`subscriptions_${walletAddress}`);
     const subs: { granteeAddress: string; label: string }[] = saved ? JSON.parse(saved) : [];
@@ -106,7 +103,6 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
     }
   };
 
-  // Remove subscription from localStorage
   const removeSubscription = (grantee: string) => {
     const saved = localStorage.getItem(`subscriptions_${walletAddress}`);
     if (!saved) return;
@@ -115,83 +111,50 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
     localStorage.setItem(`subscriptions_${walletAddress}`, JSON.stringify(filtered));
   };
 
-  // Grant permission: wrap grantPermission call inside executeWithFee
-  // Following client/src/subscriptionExample.ts pattern
   const handleGrantPermission = async () => {
-    if (!isAddress(granteeAddress)) {
-      setFormError('Invalid grantee address');
-      return;
-    }
-    if (!monthlyLimit || parseFloat(monthlyLimit) <= 0) {
-      setFormError('Monthly limit must be greater than 0');
-      return;
-    }
-    if (!perTxLimit || parseFloat(perTxLimit) <= 0) {
-      setFormError('Per-transaction limit must be greater than 0');
-      return;
-    }
+    if (!isAddress(granteeAddress)) { setFormError('Invalid grantee address'); return; }
+    if (!monthlyLimit || parseFloat(monthlyLimit) <= 0) { setFormError('Monthly limit must be > 0'); return; }
+    if (!perTxLimit || parseFloat(perTxLimit) <= 0) { setFormError('Per-tx limit must be > 0'); return; }
 
     setStep('sending');
     setFormError(null);
 
     try {
       const relayerClient = new RelayerClient(RELAYER_URL, SMART_ACCOUNT_ADDRESS as Address, CHAIN_ID);
-
-      // Get current nonce
       const nonce = await relayerClient.getNonce(walletAddress as Address);
       const { relayerAddress } = await relayerClient.getRelayerStats();
 
-      // Encode grantPermission call to user's own EOA
-      // Under EIP-7702 delegation, calling grantPermission on user's EOA sets
-      // granteePermissions[user][grantee] in the user's storage
       const grantPermissionData = encodeFunctionData({
         abi: SMART_ACCOUNT_ABI,
         functionName: 'grantPermission',
         args: [
           granteeAddress as Address,
-          parseUnits(monthlyLimit, 18), // 18 decimals (testnet token)
+          parseUnits(monthlyLimit, 18),
           parseUnits(perTxLimit, 18),
         ],
       });
 
-      const calls: Call[] = [
-        {
-          target: walletAddress as Address, // Call user's own EOA
-          value: 0n,
-          data: grantPermissionData,
-        },
-      ];
+      const calls: Call[] = [{
+        target: walletAddress as Address,
+        value: 0n,
+        data: grantPermissionData,
+      }];
 
-      // Fee: 0.01 USDT
       const feeAmount = parseUnits('0.01', 18);
 
       const result = await signAndExecute(async (walletClient) => {
         const structHash = relayerClient.getStructHash(
-          calls,
-          feeToken as Address,
-          feeAmount,
-          relayerAddress as Address,
-          nonce
+          calls, feeToken as Address, feeAmount, relayerAddress as Address, nonce
         );
-
-        const signature = await walletClient.signMessage({
-          message: { raw: structHash },
-        });
+        const signature = await walletClient.signMessage({ message: { raw: structHash } });
 
         const response = await fetch(`${RELAYER_URL}/execute-with-fee`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userAddress: walletAddress,
-            calls: calls.map((c) => ({
-              target: c.target,
-              value: c.value.toString(),
-              data: c.data,
-            })),
-            feeToken,
-            feeAmount: feeAmount.toString(),
-            nonce: nonce.toString(),
-            signature,
+            calls: calls.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
+            feeToken, feeAmount: feeAmount.toString(), nonce: nonce.toString(), signature,
           }),
         });
 
@@ -199,16 +162,11 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
           const errorText = await response.text();
           throw new Error(`Relayer error (${response.status}): ${errorText}`);
         }
-
         return response.json();
       });
 
-      if (!result) {
-        throw new Error(error || 'Failed to grant permission');
-      }
-
+      if (!result) throw new Error(error || 'Failed to grant permission');
       if (result.success) {
-        // Save to localStorage
         saveSubscription(granteeAddress, granteeLabel || `Service ${granteeAddress.slice(0, 8)}`);
         setTxHash(result.txHash);
         setStep('success');
@@ -222,7 +180,6 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
     }
   };
 
-  // Revoke permission: wrap revokePermission call inside executeWithFee
   const handleRevoke = async (grantee: string) => {
     setView('revoking');
     setFormError(null);
@@ -238,43 +195,22 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
         args: [grantee as Address],
       });
 
-      const calls: Call[] = [
-        {
-          target: walletAddress as Address,
-          value: 0n,
-          data: revokeData,
-        },
-      ];
-
+      const calls: Call[] = [{ target: walletAddress as Address, value: 0n, data: revokeData }];
       const feeAmount = parseUnits('0.01', 18);
 
       const result = await signAndExecute(async (walletClient) => {
         const structHash = relayerClient.getStructHash(
-          calls,
-          feeToken as Address,
-          feeAmount,
-          relayerAddress as Address,
-          nonce
+          calls, feeToken as Address, feeAmount, relayerAddress as Address, nonce
         );
-
-        const signature = await walletClient.signMessage({
-          message: { raw: structHash },
-        });
+        const signature = await walletClient.signMessage({ message: { raw: structHash } });
 
         const response = await fetch(`${RELAYER_URL}/execute-with-fee`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userAddress: walletAddress,
-            calls: calls.map((c) => ({
-              target: c.target,
-              value: c.value.toString(),
-              data: c.data,
-            })),
-            feeToken,
-            feeAmount: feeAmount.toString(),
-            nonce: nonce.toString(),
-            signature,
+            calls: calls.map((c) => ({ target: c.target, value: c.value.toString(), data: c.data })),
+            feeToken, feeAmount: feeAmount.toString(), nonce: nonce.toString(), signature,
           }),
         });
 
@@ -282,14 +218,10 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
           const errorText = await response.text();
           throw new Error(`Relayer error (${response.status}): ${errorText}`);
         }
-
         return response.json();
       });
 
-      if (!result) {
-        throw new Error(error || 'Failed to revoke permission');
-      }
-
+      if (!result) throw new Error(error || 'Failed to revoke permission');
       if (result.success) {
         removeSubscription(grantee);
         await loadSubscriptions();
@@ -317,93 +249,80 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-card border border-border rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <div className="p-5 border-b border-border flex items-center justify-between">
+          <h2 className="text-lg font-semibold">
             {view === 'add' ? 'Add Subscription' : 'Subscriptions'}
           </h2>
           <button
             onClick={onClose}
             disabled={isSigning || step === 'sending' || view === 'revoking'}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition disabled:opacity-50"
+            className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-muted transition disabled:opacity-50"
           >
-            <svg className="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-5 space-y-5">
           {/* List View */}
           {view === 'list' && (
             <>
               {loading ? (
                 <div className="text-center py-8">
-                  <div className="animate-spin h-8 w-8 border-4 border-purple-600 border-t-transparent rounded-full mx-auto mb-4" />
-                  <p className="text-gray-600 dark:text-gray-300">Loading subscriptions...</p>
+                  <Loader2 className="h-6 w-6 text-muted-foreground mx-auto spinner mb-3" />
+                  <p className="text-sm text-muted-foreground">Loading...</p>
                 </div>
               ) : subscriptions.length === 0 ? (
                 <div className="text-center py-8">
-                  <div className="h-16 w-16 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
+                  <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                    <Plus className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Subscriptions</h3>
-                  <p className="text-gray-600 dark:text-gray-300 mb-4">
-                    Grant permission to services for auto-billing
-                  </p>
+                  <p className="text-sm font-medium mb-1">No Subscriptions</p>
+                  <p className="text-xs text-muted-foreground">Grant permission to services for auto-billing</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {subscriptions.map((sub) => (
-                    <div
-                      key={sub.granteeAddress}
-                      className="rounded-xl border border-gray-200 dark:border-gray-600 p-4 space-y-3"
-                    >
+                    <div key={sub.granteeAddress} className="rounded-xl border border-border p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold text-gray-900 dark:text-white">{sub.label}</p>
-                          <p className="text-xs font-mono text-gray-500 dark:text-gray-400 break-all">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{sub.label}</p>
+                          <p className="text-[10px] font-mono text-muted-foreground truncate">
                             {sub.granteeAddress}
                           </p>
                         </div>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            sub.isAuthorized
-                              ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
-                              : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
-                          }`}
-                        >
+                        <span className={`shrink-0 ml-2 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                          sub.isAuthorized
+                            ? 'bg-success/10 text-success'
+                            : 'bg-destructive/10 text-destructive'
+                        }`}>
                           {sub.isAuthorized ? 'Active' : 'Revoked'}
                         </span>
                       </div>
 
                       {sub.isAuthorized && (
                         <>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div className="rounded-lg bg-gray-50 dark:bg-gray-700/50 p-2">
-                              <p className="text-gray-500 dark:text-gray-400 text-xs">Monthly Spent</p>
-                              <p className="font-semibold text-gray-900 dark:text-white">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="rounded-lg bg-muted p-2">
+                              <p className="text-[10px] text-muted-foreground">Monthly</p>
+                              <p className="text-xs font-medium">
                                 {formatUnits(BigInt(sub.monthlySpent), 18)} / {formatUnits(BigInt(sub.monthlyLimit), 18)}
                               </p>
                             </div>
-                            <div className="rounded-lg bg-gray-50 dark:bg-gray-700/50 p-2">
-                              <p className="text-gray-500 dark:text-gray-400 text-xs">Per-Tx Limit</p>
-                              <p className="font-semibold text-gray-900 dark:text-white">
-                                {formatUnits(BigInt(sub.perTxLimit), 18)}
-                              </p>
+                            <div className="rounded-lg bg-muted p-2">
+                              <p className="text-[10px] text-muted-foreground">Per-Tx Limit</p>
+                              <p className="text-xs font-medium">{formatUnits(BigInt(sub.perTxLimit), 18)}</p>
                             </div>
                           </div>
 
                           <button
                             onClick={() => handleRevoke(sub.granteeAddress)}
                             disabled={isSigning}
-                            className="w-full px-4 py-2 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition text-sm disabled:opacity-50"
+                            className="w-full px-3 py-2 rounded-lg border border-destructive/30 text-destructive text-xs hover:bg-destructive/10 transition disabled:opacity-50"
                           >
-                            Revoke Permission
+                            Revoke
                           </button>
                         </>
                       )}
@@ -414,131 +333,116 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
 
               <button
                 onClick={() => setView('add')}
-                className="w-full px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold hover:from-purple-700 hover:to-blue-700 transition"
+                className="w-full rounded-xl bg-white text-black px-4 py-3 text-sm font-medium hover:bg-white/90 transition"
               >
                 Add Subscription
               </button>
 
               {formError && (
-                <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4">
-                  <p className="text-sm text-red-800 dark:text-red-200">{formError}</p>
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                  {formError}
                 </div>
               )}
             </>
           )}
 
-          {/* Revoking View */}
+          {/* Revoking */}
           {view === 'revoking' && (
-            <div className="text-center py-8">
-              <div className="animate-spin h-16 w-16 border-4 border-red-500 border-t-transparent rounded-full mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Revoking Permission...</h3>
-              <p className="text-gray-600 dark:text-gray-300">Please confirm with your passkey</p>
+            <div className="text-center py-8 space-y-3">
+              <Loader2 className="h-8 w-8 text-muted-foreground mx-auto spinner" />
+              <p className="font-semibold">Revoking Permission...</p>
+              <p className="text-sm text-muted-foreground">Confirm with your passkey</p>
             </div>
           )}
 
-          {/* Add Subscription Form */}
+          {/* Add Form */}
           {view === 'add' && step === 'form' && (
             <>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Service Label
-                  </label>
+                  <label className="text-sm font-medium text-muted-foreground">Service Label</label>
                   <input
                     type="text"
                     value={granteeLabel}
                     onChange={(e) => setGranteeLabel(e.target.value)}
                     placeholder="e.g. Netflix, Spotify"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                    className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/30 transition"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Grantee Address
-                  </label>
+                  <label className="text-sm font-medium text-muted-foreground">Grantee Address</label>
                   <input
                     type="text"
                     value={granteeAddress}
                     onChange={(e) => setGranteeAddress(e.target.value)}
                     placeholder="0x..."
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition font-mono text-sm"
+                    className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/30 transition font-mono text-sm"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Monthly Limit (tokens)
-                  </label>
-                  <input
-                    type="number"
-                    value={monthlyLimit}
-                    onChange={(e) => setMonthlyLimit(e.target.value)}
-                    placeholder="e.g. 10"
-                    step="0.01"
-                    min="0"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-muted-foreground">Monthly Limit</label>
+                    <input
+                      type="number"
+                      value={monthlyLimit}
+                      onChange={(e) => setMonthlyLimit(e.target.value)}
+                      placeholder="10"
+                      step="0.01"
+                      min="0"
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/30 transition"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-muted-foreground">Per-Tx Limit</label>
+                    <input
+                      type="number"
+                      value={perTxLimit}
+                      onChange={(e) => setPerTxLimit(e.target.value)}
+                      placeholder="5"
+                      step="0.01"
+                      min="0"
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/30 transition"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Per-Transaction Limit (tokens)
-                  </label>
-                  <input
-                    type="number"
-                    value={perTxLimit}
-                    onChange={(e) => setPerTxLimit(e.target.value)}
-                    placeholder="e.g. 5"
-                    step="0.01"
-                    min="0"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
-                  />
-                </div>
-
-                <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-4">
-                  <p className="text-sm text-blue-900 dark:text-blue-200">
-                    <strong>How it works:</strong> The grantee can auto-charge your wallet up to these limits without requiring your signature each time. You can revoke anytime.
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-4">
-                  <p className="text-sm text-blue-900 dark:text-blue-200">
-                    <strong>Gas Fee:</strong> 0.01 USDT (paid to relayer)
+                <div className="rounded-xl bg-muted/50 border border-border/50 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    The grantee can auto-charge up to these limits without your signature. You can revoke anytime. Gas fee: 0.01 USDT.
                   </p>
                 </div>
               </div>
 
               {formError && (
-                <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4">
-                  <p className="text-sm text-red-800 dark:text-red-200">{formError}</p>
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                  {formError}
                 </div>
               )}
 
               <div className="flex gap-3">
                 <button
                   onClick={resetForm}
-                  className="flex-1 px-6 py-3 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                  className="flex-1 flex items-center justify-center gap-1 px-4 py-3 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition text-sm"
                 >
+                  <ArrowLeft className="h-3.5 w-3.5" />
                   Back
                 </button>
                 <button
                   onClick={() => {
                     const err = !isAddress(granteeAddress)
-                      ? 'Invalid grantee address'
+                      ? 'Invalid address'
                       : !monthlyLimit || parseFloat(monthlyLimit) <= 0
                         ? 'Monthly limit required'
                         : !perTxLimit || parseFloat(perTxLimit) <= 0
                           ? 'Per-tx limit required'
                           : null;
-                    if (err) {
-                      setFormError(err);
-                      return;
-                    }
+                    if (err) { setFormError(err); return; }
                     setFormError(null);
                     setStep('confirm');
                   }}
-                  className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold hover:from-purple-700 hover:to-blue-700 transition"
+                  className="flex-1 px-4 py-3 rounded-xl bg-white text-black font-medium hover:bg-white/90 transition text-sm"
                 >
                   Continue
                 </button>
@@ -546,55 +450,51 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
             </>
           )}
 
-          {/* Confirm Step */}
+          {/* Confirm */}
           {view === 'add' && step === 'confirm' && (
             <>
-              <div className="space-y-4">
-                <div className="rounded-xl bg-gray-50 dark:bg-gray-700/50 p-4 space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Service</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      {granteeLabel || 'Unnamed'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-start">
-                    <span className="text-gray-600 dark:text-gray-400">Grantee</span>
-                    <span className="font-mono text-sm text-gray-900 dark:text-white text-right break-all max-w-[200px]">
-                      {granteeAddress}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Monthly Limit</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">{monthlyLimit} tokens</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Per-Tx Limit</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">{perTxLimit} tokens</span>
-                  </div>
-                  <div className="border-t border-gray-200 dark:border-gray-600 pt-2 flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Gas Fee</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">0.01 USDT</span>
-                  </div>
+              <div className="rounded-xl bg-muted border border-border p-4 space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Service</span>
+                  <span className="font-medium">{granteeLabel || 'Unnamed'}</span>
                 </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-muted-foreground">Grantee</span>
+                  <span className="font-mono text-xs text-right break-all max-w-[200px]">{granteeAddress}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Monthly Limit</span>
+                  <span className="font-medium">{monthlyLimit} tokens</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Per-Tx Limit</span>
+                  <span className="font-medium">{perTxLimit} tokens</span>
+                </div>
+                <div className="border-t border-border pt-2 flex justify-between">
+                  <span className="text-muted-foreground">Gas Fee</span>
+                  <span className="font-medium">0.01 USDT</span>
+                </div>
+              </div>
 
-                <div className="rounded-xl bg-yellow-50 dark:bg-yellow-900/20 p-4">
-                  <p className="text-sm text-yellow-900 dark:text-yellow-200">
-                    <strong>Warning:</strong> This allows the grantee to automatically charge your wallet within the set limits. Make sure you trust this address.
-                  </p>
-                </div>
+              <div className="flex gap-3 rounded-xl bg-muted/50 border border-border/50 p-3">
+                <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">
+                  This allows the grantee to automatically charge your wallet within limits. Make sure you trust this address.
+                </p>
               </div>
 
               <div className="flex gap-3">
                 <button
                   onClick={() => setStep('form')}
-                  className="flex-1 px-6 py-3 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                  className="flex-1 flex items-center justify-center gap-1 px-4 py-3 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition text-sm"
                 >
+                  <ArrowLeft className="h-3.5 w-3.5" />
                   Back
                 </button>
                 <button
                   onClick={handleGrantPermission}
                   disabled={isSigning}
-                  className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 transition"
+                  className="flex-1 px-4 py-3 rounded-xl bg-white text-black font-medium hover:bg-white/90 disabled:opacity-40 transition text-sm"
                 >
                   Grant Permission
                 </button>
@@ -602,70 +502,45 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
             </>
           )}
 
-          {/* Sending Step */}
+          {/* Sending */}
           {view === 'add' && step === 'sending' && (
-            <div className="text-center py-8">
-              <svg
-                className="animate-spin h-16 w-16 text-purple-600 mx-auto mb-4"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                Granting Permission...
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Please confirm with your passkey if prompted
-              </p>
+            <div className="text-center py-8 space-y-3">
+              <Loader2 className="h-8 w-8 text-muted-foreground mx-auto spinner" />
+              <p className="font-semibold">Granting Permission...</p>
+              <p className="text-sm text-muted-foreground">Confirm with your passkey if prompted</p>
             </div>
           )}
 
-          {/* Success Step */}
+          {/* Success */}
           {view === 'add' && step === 'success' && txHash && (
             <>
-              <div className="text-center py-4">
-                <div className="flex justify-center mb-4">
-                  <div className="h-16 w-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                    <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
+              <div className="text-center py-4 space-y-3">
+                <div className="mx-auto h-12 w-12 rounded-full bg-success/10 flex items-center justify-center">
+                  <Check className="h-6 w-6 text-success" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                  Permission Granted!
-                </h3>
-                <p className="text-gray-600 dark:text-gray-300 mb-4">
+                <h3 className="text-lg font-semibold">Permission Granted</h3>
+                <p className="text-sm text-muted-foreground">
                   {granteeLabel || 'Service'} can now auto-charge up to {monthlyLimit} tokens/month
                 </p>
 
-                <div className="rounded-xl bg-gray-50 dark:bg-gray-700/50 p-4 mb-4">
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Transaction Hash</p>
-                  <p className="font-mono text-sm text-gray-900 dark:text-white break-all">{txHash}</p>
+                <div className="rounded-xl bg-muted border border-border p-3">
+                  <p className="text-[10px] text-muted-foreground mb-1">Transaction Hash</p>
+                  <p className="font-mono text-xs break-all">{txHash}</p>
                 </div>
 
                 <a
-                  href={`https://evmtestnet.confluxscan.com/tx/${txHash}`}
+                  href={`https://evmtestnet.confluxscan.io/tx/${txHash}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-purple-600 dark:text-purple-400 hover:underline"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition"
                 >
-                  View on Explorer
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
+                  View on Explorer <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
 
               <button
                 onClick={resetForm}
-                className="w-full px-6 py-3 rounded-xl bg-purple-600 text-white font-semibold hover:bg-purple-700 transition"
+                className="w-full px-4 py-3 rounded-xl bg-white text-black font-medium hover:bg-white/90 transition text-sm"
               >
                 Done
               </button>
