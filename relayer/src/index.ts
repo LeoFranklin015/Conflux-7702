@@ -2,11 +2,13 @@ import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { RelayerService, type ExecuteWithFeeIntent, type ExecuteIntent } from './relayer.service.js';
-import { RELAYER_CONFIG, ACTIVE_NETWORK } from './config.js';
+import { DatabaseService } from './db.service.js';
+import { RELAYER_CONFIG, ACTIVE_NETWORK, SMART_ACCOUNT_ADDRESS } from './config.js';
 import type { Address, Hex } from 'viem';
 
 const app = express();
 const relayer = new RelayerService();
+const db = new DatabaseService();
 
 // Middleware
 app.use(helmet());
@@ -72,6 +74,124 @@ app.get('/nonce/:address', async (req: Request, res: Response) => {
     console.error('Error fetching nonce:', error);
     res.status(500).json({
       error: 'Failed to fetch nonce',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /store-authorization
+ * Store EIP-7702 authorization signature for later use
+ * This allows users to "onboard" without making a transaction
+ */
+app.post('/store-authorization', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, contractAddress, chainId, nonce, r, s, yParity } =
+      req.body;
+
+    // Validate input
+    if (
+      !userAddress ||
+      !contractAddress ||
+      chainId === undefined ||
+      nonce === undefined ||
+      !r ||
+      !s ||
+      yParity === undefined
+    ) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: [
+          'userAddress',
+          'contractAddress',
+          'chainId',
+          'nonce',
+          'r',
+          's',
+          'yParity',
+        ],
+      });
+    }
+
+    // Validate addresses
+    if (
+      !userAddress.match(/^0x[a-fA-F0-9]{40}$/) ||
+      !contractAddress.match(/^0x[a-fA-F0-9]{40}$/)
+    ) {
+      return res.status(400).json({ error: 'Invalid address format' });
+    }
+
+    // Store authorization
+    db.storeAuthorization({
+      userAddress: userAddress as Address,
+      contractAddress: contractAddress as Address,
+      chainId: Number(chainId),
+      nonce: BigInt(nonce),
+      r: r as Hex,
+      s: s as Hex,
+      yParity: Number(yParity),
+    });
+
+    res.json({
+      success: true,
+      message: 'Authorization stored successfully',
+      userAddress,
+    });
+  } catch (error) {
+    console.error('Error storing authorization:', error);
+    res.status(500).json({
+      error: 'Failed to store authorization',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /authorization/:address
+ * Get stored authorization for a user
+ */
+app.get('/authorization/:address', async (req: Request, res: Response) => {
+  try {
+    const userAddress = req.params.address as Address;
+
+    if (!userAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+      return res.status(400).json({ error: 'Invalid address format' });
+    }
+
+    const auth = db.getUnusedAuthorization(
+      userAddress,
+      SMART_ACCOUNT_ADDRESS,
+      ACTIVE_NETWORK.chainId
+    );
+
+    if (!auth) {
+      return res.json({
+        hasAuthorization: false,
+        hasDelegation: db.hasDelegation(
+          userAddress,
+          SMART_ACCOUNT_ADDRESS,
+          ACTIVE_NETWORK.chainId
+        ),
+      });
+    }
+
+    res.json({
+      hasAuthorization: true,
+      authorization: {
+        userAddress: auth.userAddress,
+        contractAddress: auth.contractAddress,
+        chainId: auth.chainId,
+        nonce: auth.nonce.toString(),
+        r: auth.r,
+        s: auth.s,
+        yParity: auth.yParity,
+        createdAt: auth.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching authorization:', error);
+    res.status(500).json({
+      error: 'Failed to fetch authorization',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
@@ -183,6 +303,32 @@ app.post('/execute-with-fee', async (req: Request, res: Response) => {
       });
     }
 
+    // Check if we need to use stored authorization
+    let authToUse = authorization;
+    let storedAuthId: number | undefined;
+
+    if (!authToUse) {
+      // No authorization provided, check if we have one stored
+      const storedAuth = db.getUnusedAuthorization(
+        userAddress as Address,
+        SMART_ACCOUNT_ADDRESS,
+        ACTIVE_NETWORK.chainId
+      );
+
+      if (storedAuth) {
+        console.log(`Using stored authorization for ${userAddress}`);
+        authToUse = {
+          contractAddress: storedAuth.contractAddress,
+          chainId: storedAuth.chainId,
+          nonce: storedAuth.nonce.toString(),
+          r: storedAuth.r,
+          s: storedAuth.s,
+          yParity: storedAuth.yParity,
+        };
+        storedAuthId = storedAuth.id;
+      }
+    }
+
     const intent: ExecuteWithFeeIntent = {
       userAddress: userAddress as Address,
       calls: parsedCalls,
@@ -190,14 +336,14 @@ app.post('/execute-with-fee', async (req: Request, res: Response) => {
       feeAmount: BigInt(feeAmount),
       nonce: BigInt(nonce),
       signature: signature as Hex,
-      authorization: authorization
+      authorization: authToUse
         ? {
-            contractAddress: authorization.contractAddress as Address,
-            chainId: authorization.chainId,
-            nonce: BigInt(authorization.nonce),
-            r: authorization.r as Hex,
-            s: authorization.s as Hex,
-            yParity: authorization.yParity,
+            contractAddress: authToUse.contractAddress as Address,
+            chainId: authToUse.chainId,
+            nonce: BigInt(authToUse.nonce),
+            r: authToUse.r as Hex,
+            s: authToUse.s as Hex,
+            yParity: authToUse.yParity,
           }
         : undefined,
     };
@@ -208,6 +354,11 @@ app.post('/execute-with-fee', async (req: Request, res: Response) => {
     // Wait for confirmation (optional - could be done async)
     const receipt = await relayer.waitForTransaction(txHash);
 
+    // Mark stored authorization as used if we used one
+    if (storedAuthId !== undefined) {
+      db.markAuthorizationAsUsed(storedAuthId);
+    }
+
     res.json({
       success: true,
       txHash,
@@ -215,6 +366,7 @@ app.post('/execute-with-fee', async (req: Request, res: Response) => {
       gasUsed: receipt.gasUsed.toString(),
       status: receipt.status,
       explorer: `${ACTIVE_NETWORK.explorer}/tx/${txHash}`,
+      usedStoredAuthorization: storedAuthId !== undefined,
     });
   } catch (error) {
     console.error('Error executing intent with fee:', error);
@@ -289,6 +441,8 @@ app.listen(PORT, () => {
   console.log(`   GET  /health - Health check`);
   console.log(`   GET  /stats - Relayer statistics`);
   console.log(`   GET  /nonce/:address - Get user nonce`);
+  console.log(`   GET  /authorization/:address - Get stored authorization`);
+  console.log(`   POST /store-authorization - Store EIP-7702 authorization`);
   console.log(`   POST /execute - Execute intent (no fee)`);
   console.log(`   POST /execute-with-fee - Execute intent with fee`);
   console.log(`   POST /estimate-fee - Estimate transaction fee`);

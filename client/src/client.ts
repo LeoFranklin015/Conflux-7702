@@ -437,6 +437,74 @@ export class EIP7702Client {
   }
 
   /**
+   * Store authorization signature without submitting a transaction
+   * This allows users to "onboard" and store their delegation signature
+   * for later use when they make their first real transaction
+   */
+  async storeAuthorization(): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    console.log(`\n=== Storing Authorization for Later Use ===`);
+
+    // Sign authorization
+    const authorization = await this.signAuthorization();
+
+    // Submit to relayer to store
+    const response = await fetch(`${this.config.relayerUrl}/store-authorization`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userAddress: this.account.address,
+        contractAddress: authorization.contractAddress,
+        chainId: authorization.chainId,
+        nonce: authorization.nonce.toString(),
+        r: authorization.r,
+        s: authorization.s,
+        yParity: authorization.yParity,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(`Failed to store authorization: ${JSON.stringify(error)}`);
+    }
+
+    const result = (await response.json()) as {
+      success: boolean;
+      message: string;
+    };
+
+    console.log(`\n✅ Authorization stored!`);
+    console.log(`  User can now make transactions without re-signing authorization`);
+
+    return result;
+  }
+
+  /**
+   * Check if user has stored authorization
+   */
+  async hasStoredAuthorization(): Promise<{
+    hasAuthorization: boolean;
+    hasDelegation: boolean;
+  }> {
+    const response = await fetch(
+      `${this.config.relayerUrl}/authorization/${this.account.address}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to check authorization: ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as {
+      hasAuthorization: boolean;
+      hasDelegation: boolean;
+    };
+
+    return data;
+  }
+
+  /**
    * Helper: Get user address
    */
   getUserAddress(): Address {
