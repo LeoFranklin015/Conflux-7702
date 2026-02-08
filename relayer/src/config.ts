@@ -103,10 +103,85 @@ export const SIMPLE_SMART_ACCOUNT_ABI = [
   },
   {
     type: 'function',
+    name: 'executeWithGrantee',
+    inputs: [
+      {
+        name: 'calls',
+        type: 'tuple[]',
+        components: [
+          { name: 'target', type: 'address' },
+          { name: 'value', type: 'uint256' },
+          { name: 'data', type: 'bytes' },
+        ],
+      },
+      { name: 'feeToken', type: 'address' },
+      { name: 'feeAmount', type: 'uint256' },
+      { name: 'feeRecipient', type: 'address' },
+      { name: 'grantee', type: 'address' },
+      { name: 'nonce', type: 'uint256' },
+      { name: 'granteeSignature', type: 'bytes' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'getNonce',
     inputs: [{ name: 'account', type: 'address' }],
     outputs: [{ name: '', type: 'uint256' }],
     stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getGranteeNonce',
+    inputs: [
+      { name: 'user', type: 'address' },
+      { name: 'grantee', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isGranteeAuthorized',
+    inputs: [
+      { name: 'user', type: 'address' },
+      { name: 'grantee', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getGranteeSpending',
+    inputs: [
+      { name: 'user', type: 'address' },
+      { name: 'grantee', type: 'address' },
+    ],
+    outputs: [
+      { name: 'monthlySpent', type: 'uint256' },
+      { name: 'monthlyLimit', type: 'uint256' },
+      { name: 'perTxLimit', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'grantPermission',
+    inputs: [
+      { name: 'grantee', type: 'address' },
+      { name: 'monthlyLimit', type: 'uint256' },
+      { name: 'perTxLimit', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'revokePermission',
+    inputs: [{ name: 'grantee', type: 'address' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
   },
 ] as const;
 

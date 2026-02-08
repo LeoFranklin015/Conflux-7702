@@ -84,6 +84,16 @@ export interface ExecuteWithFeeIntent {
   };
 }
 
+export interface ExecuteWithGranteeIntent {
+  userAddress: Address;
+  calls: Call[];
+  feeToken: Address;
+  feeAmount: bigint;
+  grantee: Address;
+  nonce: bigint;
+  granteeSignature: Hex;
+}
+
 export interface RelayerStats {
   relayerAddress: Address;
   balance: string;
@@ -311,6 +321,98 @@ export class RelayerService {
 
       return txHash;
     }
+  }
+
+  /**
+   * Get grantee nonce for a user-grantee pair
+   * Reads from user's EOA storage (EIP-7702 delegation)
+   */
+  async getGranteeNonce(userAddress: Address, granteeAddress: Address): Promise<bigint> {
+    try {
+      const nonce = await this.publicClient.readContract({
+        address: userAddress, // User's EOA, not SMART_ACCOUNT
+        abi: SIMPLE_SMART_ACCOUNT_ABI,
+        functionName: 'getGranteeNonce',
+        args: [userAddress, granteeAddress],
+      });
+      return nonce as bigint;
+    } catch (error) {
+      console.log(`Could not fetch grantee nonce for ${userAddress}/${granteeAddress}, defaulting to 0`);
+      return 0n;
+    }
+  }
+
+  /**
+   * Check if grantee is authorized for a user
+   */
+  async isGranteeAuthorized(userAddress: Address, granteeAddress: Address): Promise<boolean> {
+    try {
+      const authorized = await this.publicClient.readContract({
+        address: userAddress, // User's EOA
+        abi: SIMPLE_SMART_ACCOUNT_ABI,
+        functionName: 'isGranteeAuthorized',
+        args: [userAddress, granteeAddress],
+      });
+      return authorized as boolean;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Get grantee spending info
+   */
+  async getGranteeSpending(userAddress: Address, granteeAddress: Address): Promise<{
+    monthlySpent: bigint;
+    monthlyLimit: bigint;
+    perTxLimit: bigint;
+  }> {
+    try {
+      const result = await this.publicClient.readContract({
+        address: userAddress, // User's EOA
+        abi: SIMPLE_SMART_ACCOUNT_ABI,
+        functionName: 'getGranteeSpending',
+        args: [userAddress, granteeAddress],
+      });
+      const [monthlySpent, monthlyLimit, perTxLimit] = result as [bigint, bigint, bigint];
+      return { monthlySpent, monthlyLimit, perTxLimit };
+    } catch (error) {
+      return { monthlySpent: 0n, monthlyLimit: 0n, perTxLimit: 0n };
+    }
+  }
+
+  /**
+   * Execute with grantee signature (subscription auto-billing)
+   */
+  async executeWithGrantee(intent: ExecuteWithGranteeIntent): Promise<Hash> {
+    console.log(`\n=== Executing With Grantee ===`);
+    console.log(`User: ${intent.userAddress}`);
+    console.log(`Grantee: ${intent.grantee}`);
+    console.log(`Calls: ${intent.calls.length}`);
+    console.log(`Fee Token: ${intent.feeToken}`);
+    console.log(`Fee Amount: ${intent.feeAmount}`);
+    console.log(`Nonce: ${intent.nonce}`);
+
+    const txHash = await this.walletClient.writeContract({
+      address: intent.userAddress, // Call user's EOA (has delegation)
+      abi: SIMPLE_SMART_ACCOUNT_ABI,
+      functionName: 'executeWithGrantee',
+      args: [
+        intent.calls,
+        intent.feeToken,
+        intent.feeAmount,
+        this.account.address, // Relayer receives fee
+        intent.grantee,
+        intent.nonce,
+        intent.granteeSignature,
+      ],
+      account: this.account,
+    });
+
+    console.log(`Transaction submitted: ${txHash}`);
+    console.log(`Explorer: ${ACTIVE_NETWORK.explorer}/tx/${txHash}`);
+
+    return txHash;
   }
 
   /**

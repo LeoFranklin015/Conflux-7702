@@ -40,10 +40,16 @@ export class RelayerClient {
   private smartAccountAddress: Address;
   private chainId: number;
 
-  // Type hash (must match contract)
+  // Type hashes (must match contract)
   private readonly EXECUTE_WITH_FEE_TYPEHASH = keccak256(
     toHex(
       'ExecuteWithFee(bytes32 callsHash,address feeToken,uint256 feeAmount,address feeRecipient,uint256 nonce,uint256 chainId)'
+    )
+  );
+
+  private readonly GRANTEE_EXECUTE_TYPEHASH = keccak256(
+    toHex(
+      'GranteeExecute(address user,bytes32 callsHash,address feeToken,uint256 feeAmount,address feeRecipient,uint256 nonce,uint256 chainId)'
     )
   );
 
@@ -102,9 +108,105 @@ export class RelayerClient {
   }
 
   /**
+   * Get grantee nonce from relayer
+   */
+  async getGranteeNonce(userAddress: Address, granteeAddress: Address): Promise<bigint> {
+    const response = await fetch(`${this.relayerUrl}/grantee-nonce/${userAddress}/${granteeAddress}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch grantee nonce: ${response.statusText}`);
+    }
+    const data = (await response.json()) as { nonce: string };
+    return BigInt(data.nonce);
+  }
+
+  /**
+   * Get grantee info (authorization + spending)
+   */
+  async getGranteeInfo(userAddress: Address, granteeAddress: Address): Promise<{
+    isAuthorized: boolean;
+    monthlySpent: string;
+    monthlyLimit: string;
+    perTxLimit: string;
+  }> {
+    const response = await fetch(`${this.relayerUrl}/grantee-info/${userAddress}/${granteeAddress}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch grantee info: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get grantee execute struct hash for signing (matches contract GRANTEE_EXECUTE_TYPEHASH)
+   */
+  getGranteeStructHash(
+    userAddress: Address,
+    calls: Call[],
+    feeToken: Address,
+    feeAmount: bigint,
+    feeRecipient: Address,
+    nonce: bigint
+  ): Hex {
+    const callsHash = this.hashCalls(calls);
+
+    return keccak256(
+      encodeAbiParameters(
+        parseAbiParameters('bytes32, address, bytes32, address, uint256, address, uint256, uint256'),
+        [
+          this.GRANTEE_EXECUTE_TYPEHASH,
+          userAddress,
+          callsHash,
+          feeToken,
+          feeAmount,
+          feeRecipient,
+          nonce,
+          BigInt(this.chainId),
+        ]
+      )
+    );
+  }
+
+  /**
+   * Submit grantee execution to relayer
+   */
+  async submitGranteeExecution(
+    userAddress: Address,
+    calls: Call[],
+    feeToken: Address,
+    feeAmount: bigint,
+    grantee: Address,
+    nonce: bigint,
+    granteeSignature: Hex
+  ): Promise<TransactionResult> {
+    const response = await fetch(`${this.relayerUrl}/execute-with-grantee`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userAddress,
+        calls: calls.map((c) => ({
+          target: c.target,
+          value: c.value.toString(),
+          data: c.data,
+        })),
+        feeToken,
+        feeAmount: feeAmount.toString(),
+        grantee,
+        nonce: nonce.toString(),
+        granteeSignature,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to execute with grantee: ${errorText}`);
+    }
+
+    return response.json();
+  }
+
+  /**
    * Hash an array of calls (same logic as contract)
    */
-  private hashCalls(calls: Call[]): Hex {
+  hashCalls(calls: Call[]): Hex {
     let concatenated = '0x' as Hex;
 
     for (const call of calls) {

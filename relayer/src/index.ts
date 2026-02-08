@@ -1,7 +1,7 @@
 import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { RelayerService, type ExecuteWithFeeIntent, type ExecuteIntent } from './relayer.service.js';
+import { RelayerService, type ExecuteWithFeeIntent, type ExecuteIntent, type ExecuteWithGranteeIntent } from './relayer.service.js';
 import { DatabaseService } from './db.service.js';
 import { RELAYER_CONFIG, ACTIVE_NETWORK, SMART_ACCOUNT_ADDRESS } from './config.js';
 import type { Address, Hex } from 'viem';
@@ -378,6 +378,128 @@ app.post('/execute-with-fee', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /grantee-nonce/:userAddress/:granteeAddress
+ * Get grantee nonce for a user-grantee pair
+ */
+app.get('/grantee-nonce/:userAddress/:granteeAddress', async (req: Request, res: Response) => {
+  try {
+    const userAddress = req.params.userAddress as Address;
+    const granteeAddress = req.params.granteeAddress as Address;
+
+    if (!userAddress.match(/^0x[a-fA-F0-9]{40}$/) || !granteeAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+      return res.status(400).json({ error: 'Invalid address format' });
+    }
+
+    const nonce = await relayer.getGranteeNonce(userAddress, granteeAddress);
+
+    res.json({
+      userAddress,
+      granteeAddress,
+      nonce: nonce.toString(),
+    });
+  } catch (error) {
+    console.error('Error fetching grantee nonce:', error);
+    res.status(500).json({
+      error: 'Failed to fetch grantee nonce',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /grantee-info/:userAddress/:granteeAddress
+ * Get grantee authorization and spending info
+ */
+app.get('/grantee-info/:userAddress/:granteeAddress', async (req: Request, res: Response) => {
+  try {
+    const userAddress = req.params.userAddress as Address;
+    const granteeAddress = req.params.granteeAddress as Address;
+
+    if (!userAddress.match(/^0x[a-fA-F0-9]{40}$/) || !granteeAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+      return res.status(400).json({ error: 'Invalid address format' });
+    }
+
+    const isAuthorized = await relayer.isGranteeAuthorized(userAddress, granteeAddress);
+    const spending = await relayer.getGranteeSpending(userAddress, granteeAddress);
+
+    res.json({
+      userAddress,
+      granteeAddress,
+      isAuthorized,
+      monthlySpent: spending.monthlySpent.toString(),
+      monthlyLimit: spending.monthlyLimit.toString(),
+      perTxLimit: spending.perTxLimit.toString(),
+    });
+  } catch (error) {
+    console.error('Error fetching grantee info:', error);
+    res.status(500).json({
+      error: 'Failed to fetch grantee info',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /execute-with-grantee
+ * Execute with grantee signature (subscription auto-billing)
+ */
+app.post('/execute-with-grantee', async (req: Request, res: Response) => {
+  try {
+    const {
+      userAddress,
+      calls,
+      feeToken,
+      feeAmount,
+      grantee,
+      nonce,
+      granteeSignature,
+    } = req.body;
+
+    if (!userAddress || !calls || !feeToken || feeAmount === undefined ||
+        !grantee || nonce === undefined || !granteeSignature) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['userAddress', 'calls', 'feeToken', 'feeAmount', 'grantee', 'nonce', 'granteeSignature'],
+      });
+    }
+
+    const parsedCalls = calls.map((call: any) => ({
+      target: call.target as Address,
+      value: BigInt(call.value || 0),
+      data: call.data as Hex,
+    }));
+
+    const intent: ExecuteWithGranteeIntent = {
+      userAddress: userAddress as Address,
+      calls: parsedCalls,
+      feeToken: feeToken as Address,
+      feeAmount: BigInt(feeAmount),
+      grantee: grantee as Address,
+      nonce: BigInt(nonce),
+      granteeSignature: granteeSignature as Hex,
+    };
+
+    const txHash = await relayer.executeWithGrantee(intent);
+    const receipt = await relayer.waitForTransaction(txHash);
+
+    res.json({
+      success: true,
+      txHash,
+      blockNumber: receipt.blockNumber.toString(),
+      gasUsed: receipt.gasUsed.toString(),
+      status: receipt.status,
+      explorer: `${ACTIVE_NETWORK.explorer}/tx/${txHash}`,
+    });
+  } catch (error) {
+    console.error('Error executing with grantee:', error);
+    res.status(500).json({
+      error: 'Failed to execute with grantee',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
  * POST /estimate-fee
  * Estimate fee for a transaction
  */
@@ -442,9 +564,12 @@ app.listen(PORT, () => {
   console.log(`   GET  /stats - Relayer statistics`);
   console.log(`   GET  /nonce/:address - Get user nonce`);
   console.log(`   GET  /authorization/:address - Get stored authorization`);
+  console.log(`   GET  /grantee-nonce/:user/:grantee - Get grantee nonce`);
+  console.log(`   GET  /grantee-info/:user/:grantee - Get grantee info`);
   console.log(`   POST /store-authorization - Store EIP-7702 authorization`);
   console.log(`   POST /execute - Execute intent (no fee)`);
   console.log(`   POST /execute-with-fee - Execute intent with fee`);
+  console.log(`   POST /execute-with-grantee - Execute with grantee signature`);
   console.log(`   POST /estimate-fee - Estimate transaction fee`);
   console.log(`\n✅ Ready to relay transactions!\n`);
 });

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { SendTokens } from './SendTokens';
+import { ManageSubscriptions } from './ManageSubscriptions';
 
 interface DashboardProps {
   walletAddress: string;
@@ -12,6 +13,7 @@ export function Dashboard({ walletAddress }: DashboardProps) {
   const { clearWallet, hasAuthorization } = useWallet();
   const [copied, setCopied] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [showSubscriptions, setShowSubscriptions] = useState(false);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(walletAddress);
@@ -106,36 +108,27 @@ export function Dashboard({ walletAddress }: DashboardProps) {
 
         {/* Subscriptions Section */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-            Subscriptions
-          </h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Subscriptions
+            </h2>
+            <button
+              onClick={() => setShowSubscriptions(true)}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition"
+            >
+              Manage
+            </button>
+          </div>
 
-          <div className="text-center py-12">
-            <div className="flex justify-center mb-4">
-              <div className="h-16 w-16 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                <svg
-                  className="w-8 h-8 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                  />
-                </svg>
-              </div>
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              No Subscriptions Yet
-            </h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-6">
-              Grant permission to services to enable auto-billing
+          <div className="text-center py-8">
+            <p className="text-gray-600 dark:text-gray-300 mb-4">
+              Grant permission to services for auto-billing with spending limits
             </p>
-            <button className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold hover:from-purple-700 hover:to-blue-700 transition-all transform hover:scale-[1.02]">
-              Add Subscription
+            <button
+              onClick={() => setShowSubscriptions(true)}
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold hover:from-purple-700 hover:to-blue-700 transition-all transform hover:scale-[1.02]"
+            >
+              Manage Subscriptions
             </button>
           </div>
         </div>
@@ -194,6 +187,14 @@ export function Dashboard({ walletAddress }: DashboardProps) {
           onSuccess={(txHash) => {
             console.log('Transaction sent:', txHash);
           }}
+        />
+      )}
+
+      {/* Subscriptions Modal */}
+      {showSubscriptions && (
+        <ManageSubscriptions
+          walletAddress={walletAddress}
+          onClose={() => setShowSubscriptions(false)}
         />
       )}
     </div>

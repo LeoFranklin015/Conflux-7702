@@ -9,6 +9,8 @@
     "batch": "tsx src/batchExample.ts",
     "onboard": "tsx src/onboardingExample.ts",
     "subscription": "tsx src/subscriptionExample.ts",
+    "grant": "tsx src/grantPermission.ts",
+    "charge": "tsx src/netflixCharge.ts",
     "build": "tsc",
     "test": "tsx src/example.ts"
   },
