@@ -1,0 +1,24 @@
+{
+  "name": "eip7702-client",
+  "version": "1.0.0",
+  "description": "Client SDK for EIP-7702 Gas Sponsorship on Conflux eSpace",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/example.ts",
+    "build": "tsc",
+    "test": "tsx src/example.ts"
+  },
+  "keywords": ["eip-7702", "conflux", "espace", "client", "sdk"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "viem": "^2.7.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.9.3"
+  }
+}
