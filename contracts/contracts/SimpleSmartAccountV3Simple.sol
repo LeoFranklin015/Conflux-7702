@@ -34,7 +34,15 @@ contract SimpleSmartAccountV3Simple {
         uint256 perTxLimit
     );
     event GranteeRevoked(address indexed user, address indexed grantee);
+    event Executed(address indexed account, uint256 nonce);
     event ExecutedWithFee(
+        address indexed account,
+        uint256 nonce,
+        address feeToken,
+        uint256 feeAmount,
+        address feeRecipient
+    );
+    event ExecutedWithGrantee(
         address indexed user,
         address indexed grantee,
         uint256 nonce,
@@ -56,7 +64,15 @@ contract SimpleSmartAccountV3Simple {
     mapping(address => mapping(address => uint256)) public granteeNonces;
     mapping(address => uint256) public nonces;
 
-    // Type hash for grantee signature
+    // Type hashes
+    bytes32 private constant EXECUTE_TYPEHASH = keccak256(
+        "Execute(bytes32 callsHash,uint256 nonce,uint256 chainId)"
+    );
+
+    bytes32 private constant EXECUTE_WITH_FEE_TYPEHASH = keccak256(
+        "ExecuteWithFee(bytes32 callsHash,address feeToken,uint256 feeAmount,address feeRecipient,uint256 nonce,uint256 chainId)"
+    );
+
     bytes32 private constant GRANTEE_EXECUTE_TYPEHASH = keccak256(
         "GranteeExecute(address user,bytes32 callsHash,address feeToken,uint256 feeAmount,address feeRecipient,uint256 nonce,uint256 chainId)"
     );
@@ -103,6 +119,34 @@ contract SimpleSmartAccountV3Simple {
     }
 
     // ========== EXECUTION ==========
+
+    /**
+     * @notice Execute batched calls without fee (user-signed)
+     */
+    function execute(
+        Call[] calldata calls,
+        uint256 nonce,
+        bytes calldata signature
+    ) external {
+        address account = address(this);
+
+        if (nonces[account] != nonce) revert InvalidNonce();
+
+        bytes32 callsHash = _hashCalls(calls);
+        bytes32 structHash = keccak256(
+            abi.encode(EXECUTE_TYPEHASH, callsHash, nonce, block.chainid)
+        );
+        _verifyUserSignature(account, structHash, signature);
+
+        nonces[account]++;
+
+        for (uint256 i = 0; i < calls.length; i++) {
+            (bool success,) = calls[i].target.call{value: calls[i].value}(calls[i].data);
+            if (!success) revert ExecutionFailed(i);
+        }
+
+        emit Executed(account, nonce);
+    }
 
     /**
      * @notice Execute with grantee signature
@@ -163,7 +207,68 @@ contract SimpleSmartAccountV3Simple {
             }
         }
 
-        emit ExecutedWithFee(user, grantee, nonce, feeToken, feeAmount);
+        emit ExecutedWithGrantee(user, grantee, nonce, feeToken, feeAmount);
+    }
+
+    /**
+     * @notice Execute batched calls with fee payment (user-signed)
+     * @param calls Array of calls to execute
+     * @param feeToken Address of ERC20 token for fee payment
+     * @param feeAmount Amount of tokens to pay as fee
+     * @param feeRecipient Address to receive the fee (relayer)
+     * @param nonce Replay protection nonce
+     * @param signature User's signature over the execution parameters
+     */
+    function executeWithFee(
+        Call[] calldata calls,
+        address feeToken,
+        uint256 feeAmount,
+        address feeRecipient,
+        uint256 nonce,
+        bytes calldata signature
+    ) external {
+        address account = address(this);
+
+        // Verify nonce
+        if (nonces[account] != nonce) revert InvalidNonce();
+
+        // Hash the calls array
+        bytes32 callsHash = _hashCalls(calls);
+
+        // Verify signature
+        bytes32 structHash = keccak256(
+            abi.encode(
+                EXECUTE_WITH_FEE_TYPEHASH,
+                callsHash,
+                feeToken,
+                feeAmount,
+                feeRecipient,
+                nonce,
+                block.chainid
+            )
+        );
+        _verifyUserSignature(account, structHash, signature);
+
+        // Increment nonce
+        nonces[account]++;
+
+        // Execute calls
+        for (uint256 i = 0; i < calls.length; i++) {
+            (bool success,) = calls[i].target.call{value: calls[i].value}(calls[i].data);
+            if (!success) revert ExecutionFailed(i);
+        }
+
+        // Pay fee
+        if (feeAmount > 0) {
+            (bool success, bytes memory result) = feeToken.call(
+                abi.encodeWithSignature("transfer(address,uint256)", feeRecipient, feeAmount)
+            );
+            if (!success || (result.length > 0 && !abi.decode(result, (bool)))) {
+                revert InsufficientFeePayment();
+            }
+        }
+
+        emit ExecutedWithFee(account, nonce, feeToken, feeAmount, feeRecipient);
     }
 
     // ========== VIEW FUNCTIONS ==========
@@ -230,6 +335,15 @@ contract SimpleSmartAccountV3Simple {
         return keccak256(concatenated);
     }
 
+    function _verifyUserSignature(address account, bytes32 structHash, bytes calldata signature)
+        internal
+        pure
+    {
+        bytes32 messageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", structHash));
+        address recovered = _recoverSigner(messageHash, signature);
+        if (recovered != account) revert InvalidSignature();
+    }
+
     function _verifyGranteeSignature(address grantee, bytes32 structHash, bytes calldata signature)
         internal
         pure
@@ -261,4 +375,6 @@ contract SimpleSmartAccountV3Simple {
 
         return ecrecover(messageHash, v, r, s);
     }
+
+    receive() external payable {}
 }

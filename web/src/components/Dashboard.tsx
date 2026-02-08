@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
+import { SendTokens } from './SendTokens';
 
 interface DashboardProps {
   walletAddress: string;
@@ -10,6 +11,7 @@ interface DashboardProps {
 export function Dashboard({ walletAddress }: DashboardProps) {
   const { clearWallet, hasAuthorization } = useWallet();
   const [copied, setCopied] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(walletAddress);
@@ -146,7 +148,7 @@ export function Dashboard({ walletAddress }: DashboardProps) {
               icon="📤"
               title="Send"
               description="Send tokens"
-              onClick={() => alert('Send feature coming soon!')}
+              onClick={() => setShowSendModal(true)}
             />
             <ActionButton
               icon="📥"
@@ -183,6 +185,17 @@ export function Dashboard({ walletAddress }: DashboardProps) {
           </a>
         </div>
       </div>
+
+      {/* Send Tokens Modal */}
+      {showSendModal && (
+        <SendTokens
+          walletAddress={walletAddress}
+          onClose={() => setShowSendModal(false)}
+          onSuccess={(txHash) => {
+            console.log('Transaction sent:', txHash);
+          }}
+        />
+      )}
     </div>
   );
 }

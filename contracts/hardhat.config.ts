@@ -11,6 +11,7 @@ const config: HardhatUserConfig = {
         enabled: true,
         runs: 200,
       },
+      viaIR: true,
       evmVersion: "cancun", // EIP-7702 support
     },
   },

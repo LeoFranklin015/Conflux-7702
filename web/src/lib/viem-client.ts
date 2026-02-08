@@ -94,7 +94,7 @@ export function getAccountFromPrivateKey(privateKey: `0x${string}`) {
 /**
  * Smart Account contract address (deployed SimpleSmartAccountV3Simple)
  */
-export const SMART_ACCOUNT_ADDRESS = '0xc7B7F951439e7CEc48fC9B428Cf487D9bE75C33F' as const;
+export const SMART_ACCOUNT_ADDRESS = '0x8cC46F74430Fc25Fa2E59EBdf66674C62dBeeD12' as const;
 
 /**
  * Smart Account ABI (simplified V3)
@@ -177,5 +177,5 @@ export const SMART_ACCOUNT_ABI = [
  */
 export const TESTNET_TOKENS = {
   // Add your testnet token address here
-  USDT: '0xfBeF973C6374A24F0E40EFe7E987219E3c8472c6', // Example testnet token
+  USDT: '0xfBeF97434ffd0587E5a1c88Efd5F7BDC405bA6Fa', // Testnet token (18 decimals)
 } as const;

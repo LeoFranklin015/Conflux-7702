@@ -198,45 +198,60 @@ export function useWallet(): UseWalletReturn {
 
   /**
    * Authorize the smart account using EIP-7702
-   * This will prompt for passkey to sign the authorization
+   * Signs a real EIP-7702 authorization and stores it in the relayer DB
    */
   const authorizeSmartAccount = useCallback(async (): Promise<string | null> => {
     setIsAuthorizing(true);
     setError(null);
 
-    try {
-      // Use signAndExecute which will automatically prompt for passkey if needed
-      const result = await signAndExecute(async (walletClient) => {
-        // In a real implementation, this would create and sign an EIP-7702 authorization
-        // For now, we'll create a signed message to demonstrate the flow
-        const message = `Authorize Smart Account\n\nContract: ${SMART_ACCOUNT_ADDRESS}\nChain ID: 71\nTimestamp: ${Date.now()}`;
+    const RELAYER_URL = process.env.NEXT_PUBLIC_RELAYER_URL || 'http://localhost:3000';
+    const CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '71');
 
-        // Sign the authorization message
-        const signature = await walletClient.signMessage({
-          message,
+    try {
+      const result = await signAndExecute(async (walletClient) => {
+        // Get the account's current chain nonce for the authorization
+        const nonce = 0; // First authorization
+
+        // Sign EIP-7702 authorization
+        const auth = await walletClient.signAuthorization({
+          account: walletClient.account!,
+          contractAddress: SMART_ACCOUNT_ADDRESS as `0x${string}`,
+          chainId: CHAIN_ID,
+          nonce,
         });
 
-        return { signature, message };
+        // Store authorization in relayer DB
+        const response = await fetch(`${RELAYER_URL}/store-authorization`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userAddress: walletClient.account!.address,
+            contractAddress: SMART_ACCOUNT_ADDRESS,
+            chainId: CHAIN_ID,
+            nonce: nonce.toString(),
+            r: auth.r,
+            s: auth.s,
+            yParity: auth.yParity ?? 0,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(`Failed to store authorization: ${JSON.stringify(error)}`);
+        }
+
+        return response.json();
       });
 
       if (!result) {
         throw new Error('Failed to sign authorization');
       }
 
-      // Store the signed authorization
-      const authData = {
-        contractAddress: SMART_ACCOUNT_ADDRESS,
-        chainId: 71,
-        timestamp: Date.now(),
-        address: address,
-        signature: result.signature,
-      };
-
-      const authString = JSON.stringify(authData);
-      storeAuthorizationSignature(authString);
+      // Store locally that we have authorization
+      storeAuthorizationSignature(JSON.stringify({ stored: true, timestamp: Date.now() }));
       setHasAuthorization(true);
 
-      return authString;
+      return 'authorized';
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Authorization failed';
       setError(message);
