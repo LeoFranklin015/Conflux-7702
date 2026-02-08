@@ -4,10 +4,26 @@ import "@nomicfoundation/hardhat-foundry";
 import  "dotenv/config";
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.19",
+  solidity: {
+    version: "0.8.24",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200,
+      },
+      evmVersion: "cancun", // EIP-7702 support
+    },
+  },
   networks: {
     espaceTestnet: {
-      url: process.env.ESPACE_TESTNET_URL || "",
+      url: process.env.ESPACE_TESTNET_URL || "https://evmtestnet.confluxrpc.com",
+      chainId: 71,
+      accounts:
+        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+    },
+    espaceMainnet: {
+      url: process.env.ESPACE_MAINNET_URL || "https://evm.confluxrpc.com",
+      chainId: 1030,
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
