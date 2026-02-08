@@ -22,9 +22,10 @@ interface Subscription {
 interface ManageSubscriptionsProps {
   walletAddress: string;
   onClose: () => void;
+  inline?: boolean;
 }
 
-export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscriptionsProps) {
+export function ManageSubscriptions({ walletAddress, onClose, inline }: ManageSubscriptionsProps) {
   const { signAndExecute, isSigning, error } = useWallet();
 
   const [view, setView] = useState<'list' | 'add' | 'revoking'>('list');
@@ -248,14 +249,13 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
     loadSubscriptions();
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-card border border-border rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="p-5 border-b border-border flex items-center justify-between">
-          <h2 className="text-lg font-semibold">
-            {view === 'add' ? 'Add Subscription' : 'Subscriptions'}
-          </h2>
+  const content = (
+    <>
+      <div className={inline ? 'flex items-center justify-between mb-6' : 'p-5 border-b border-border flex items-center justify-between'}>
+        <h2 className="text-lg font-semibold">
+          {view === 'add' ? 'Add Subscription' : 'Subscriptions'}
+        </h2>
+        {!inline && (
           <button
             onClick={onClose}
             disabled={isSigning || step === 'sending' || view === 'revoking'}
@@ -263,9 +263,10 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
           >
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
-        </div>
+        )}
+      </div>
 
-        <div className="p-5 space-y-5">
+      <div className={inline ? 'space-y-5' : 'p-5 space-y-5'}>
           {/* List View */}
           {view === 'list' && (
             <>
@@ -546,7 +547,16 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
               </button>
             </>
           )}
-        </div>
+      </div>
+    </>
+  );
+
+  if (inline) return content;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-card border border-border rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-5">
+        {content}
       </div>
     </div>
   );
