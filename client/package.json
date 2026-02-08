@@ -8,6 +8,7 @@
     "dev": "tsx src/example.ts",
     "batch": "tsx src/batchExample.ts",
     "onboard": "tsx src/onboardingExample.ts",
+    "subscription": "tsx src/subscriptionExample.ts",
     "build": "tsc",
     "test": "tsx src/example.ts"
   },
