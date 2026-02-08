@@ -13,7 +13,7 @@ interface SendTokensProps {
   onSuccess?: (txHash: string) => void;
 }
 
-type Token = 'CFX' | 'USDT';
+type Token = 'CFX' | 'USDC';
 
 const RELAYER_URL = process.env.NEXT_PUBLIC_RELAYER_URL || 'http://localhost:3000';
 const CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '71');
@@ -21,17 +21,17 @@ const CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '71');
 export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProps) {
   const { signAndExecute, isSigning, error } = useWallet();
 
-  const [selectedToken, setSelectedToken] = useState<Token>('USDT');
+  const [selectedToken, setSelectedToken] = useState<Token>('USDC');
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [step, setStep] = useState<'form' | 'confirm' | 'sending' | 'success'>('form');
   const [txHash, setTxHash] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
 
-  const tokens = [
+  const tokens: { symbol: Token; name: string; decimals: number; address?: string }[] = [
     { symbol: 'CFX', name: 'Conflux', decimals: 18 },
-    { symbol: 'USDT', name: 'Tether USD', decimals: 18, address: TESTNET_TOKENS.USDT },
-  ] as const;
+    { symbol: 'USDC', name: 'USD Coin', decimals: 18, address: TESTNET_TOKENS.USDT },
+  ];
 
   const selectedTokenInfo = tokens.find((t) => t.symbol === selectedToken)!;
   const feeToken = TESTNET_TOKENS.USDT;
@@ -189,20 +189,29 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
               <div className="space-y-2">
                 <label className="text-sm font-medium text-muted-foreground">Token</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {tokens.map((token) => (
-                    <button
-                      key={token.symbol}
-                      onClick={() => setSelectedToken(token.symbol)}
-                      className={`p-3 rounded-xl border transition text-left ${
-                        selectedToken === token.symbol
-                          ? 'border-white/30 bg-muted'
-                          : 'border-border hover:border-border/80'
-                      }`}
-                    >
-                      <div className="text-sm font-medium">{token.symbol}</div>
-                      <div className="text-xs text-muted-foreground">{token.name}</div>
-                    </button>
-                  ))}
+                  {tokens.map((token) => {
+                    const isSelected = selectedToken === token.symbol;
+                    return (
+                      <button
+                        key={token.symbol}
+                        type="button"
+                        onClick={() => setSelectedToken(token.symbol)}
+                        className={`relative p-3 rounded-xl border-2 transition-all text-left ${
+                          isSelected
+                            ? 'border-white bg-white/10'
+                            : 'border-border hover:border-muted-foreground/40'
+                        }`}
+                      >
+                        {isSelected && (
+                          <div className="absolute top-2 right-2 h-4 w-4 rounded-full bg-white flex items-center justify-center">
+                            <Check className="h-2.5 w-2.5 text-black" />
+                          </div>
+                        )}
+                        <div className="text-sm font-medium">{token.symbol}</div>
+                        <div className="text-xs text-muted-foreground">{token.name}</div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -232,7 +241,7 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
 
               <div className="rounded-xl bg-muted/50 border border-border/50 p-3">
                 <p className="text-xs text-muted-foreground">
-                  <span className="font-medium">Gas Fee:</span> 0.01 USDT (relayer sponsorship)
+                  <span className="font-medium">Gas Fee:</span> 0.01 USDC (relayer sponsorship)
                 </p>
               </div>
 
@@ -273,7 +282,7 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Gas Fee</span>
-                  <span className="font-medium">0.01 USDT</span>
+                  <span className="font-medium">0.01 USDC</span>
                 </div>
                 <div className="border-t border-border pt-2 flex justify-between">
                   <span className="text-muted-foreground">To</span>
@@ -309,7 +318,7 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
           {/* Sending */}
           {step === 'sending' && (
             <div className="text-center py-8 space-y-3">
-              <Loader2 className="h-8 w-8 text-muted-foreground mx-auto spinner" />
+              <Loader2 className="h-8 w-8 text-muted-foreground mx-auto animate-spin" />
               <p className="font-semibold">Sending Transaction...</p>
               <p className="text-sm text-muted-foreground">Confirm with your passkey if prompted</p>
             </div>

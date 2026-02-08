@@ -271,7 +271,7 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
             <>
               {loading ? (
                 <div className="text-center py-8">
-                  <Loader2 className="h-6 w-6 text-muted-foreground mx-auto spinner mb-3" />
+                  <Loader2 className="h-6 w-6 text-muted-foreground mx-auto animate-spin mb-3" />
                   <p className="text-sm text-muted-foreground">Loading...</p>
                 </div>
               ) : subscriptions.length === 0 ? (
@@ -349,7 +349,7 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
           {/* Revoking */}
           {view === 'revoking' && (
             <div className="text-center py-8 space-y-3">
-              <Loader2 className="h-8 w-8 text-muted-foreground mx-auto spinner" />
+              <Loader2 className="h-8 w-8 text-muted-foreground mx-auto animate-spin" />
               <p className="font-semibold">Revoking Permission...</p>
               <p className="text-sm text-muted-foreground">Confirm with your passkey</p>
             </div>
@@ -505,7 +505,7 @@ export function ManageSubscriptions({ walletAddress, onClose }: ManageSubscripti
           {/* Sending */}
           {view === 'add' && step === 'sending' && (
             <div className="text-center py-8 space-y-3">
-              <Loader2 className="h-8 w-8 text-muted-foreground mx-auto spinner" />
+              <Loader2 className="h-8 w-8 text-muted-foreground mx-auto animate-spin" />
               <p className="font-semibold">Granting Permission...</p>
               <p className="text-sm text-muted-foreground">Confirm with your passkey if prompted</p>
             </div>

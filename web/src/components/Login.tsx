@@ -68,7 +68,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
           >
             {isLoading ? (
               <>
-                <Loader2 className="h-4 w-4 spinner" />
+                <Loader2 className="h-4 w-4 animate-spin" />
                 {isAuthenticating ? 'Authenticating...' : 'Unlocking...'}
               </>
             ) : (

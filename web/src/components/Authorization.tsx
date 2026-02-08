@@ -70,7 +70,7 @@ export function Authorization({ walletAddress, onComplete, onSkip }: Authorizati
             </>
           ) : (
             <div className="text-center space-y-4 py-8">
-              <Loader2 className="h-8 w-8 text-muted-foreground mx-auto spinner" />
+              <Loader2 className="h-8 w-8 text-muted-foreground mx-auto animate-spin" />
               <div className="space-y-1">
                 <p className="font-semibold">Setting up authorization...</p>
                 <p className="text-sm text-muted-foreground">This will only take a moment</p>

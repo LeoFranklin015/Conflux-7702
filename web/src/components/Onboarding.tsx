@@ -56,7 +56,7 @@ export function Onboarding() {
   if (step === 'checking') {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="h-5 w-5 border-2 border-white/20 border-t-white rounded-full spinner" />
+        <div className="h-5 w-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
       </div>
     );
   }

@@ -81,7 +81,7 @@ export function PasskeySetup({ onPasskeyCreated, onBack }: PasskeySetupProps) {
                 disabled={isRegistering}
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                {isChecking && <Loader2 className="h-4 w-4 text-muted-foreground spinner" />}
+                {isChecking && <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />}
                 {!isChecking && isAvailable === true && <Check className="h-4 w-4 text-success" />}
                 {!isChecking && isAvailable === false && <X className="h-4 w-4 text-destructive" />}
               </div>
@@ -115,7 +115,7 @@ export function PasskeySetup({ onPasskeyCreated, onBack }: PasskeySetupProps) {
           >
             {isRegistering ? (
               <>
-                <Loader2 className="h-4 w-4 spinner" />
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Creating...
               </>
             ) : (

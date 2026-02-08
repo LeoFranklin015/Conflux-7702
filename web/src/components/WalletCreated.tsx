@@ -50,7 +50,7 @@ export function WalletCreated({ passkeyCredentialId, username, onWalletCreated }
     return (
       <div className="min-h-screen flex items-center justify-center px-6">
         <div className="text-center space-y-4">
-          <Loader2 className="h-10 w-10 text-muted-foreground mx-auto spinner" />
+          <Loader2 className="h-10 w-10 text-muted-foreground mx-auto animate-spin" />
           <div className="space-y-1">
             <p className="text-lg font-semibold">Creating Wallet</p>
             <p className="text-sm text-muted-foreground">Generating keys and encrypting...</p>
@@ -103,7 +103,7 @@ export function WalletCreated({ passkeyCredentialId, username, onWalletCreated }
           <div className="mt-2 flex items-center justify-center gap-1.5">
             {ensStatus === 'registering' && (
               <>
-                <Loader2 className="h-3 w-3 text-muted-foreground spinner" />
+                <Loader2 className="h-3 w-3 text-muted-foreground animate-spin" />
                 <span className="text-xs text-muted-foreground">Registering on-chain...</span>
               </>
             )}
