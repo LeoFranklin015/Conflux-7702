@@ -13,6 +13,7 @@ type OnboardingStep = 'checking' | 'welcome' | 'passkey' | 'wallet-created' | 'a
 export function Onboarding() {
   const [step, setStep] = useState<OnboardingStep>('checking');
   const [passkeyCredentialId, setPasskeyCredentialId] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,8 +34,9 @@ export function Onboarding() {
     setStep('passkey');
   };
 
-  const handlePasskeyCreated = (credentialId: string) => {
+  const handlePasskeyCreated = (credentialId: string, name: string) => {
     setPasskeyCredentialId(credentialId);
+    setUsername(name);
     setStep('wallet-created');
   };
 
@@ -70,9 +72,10 @@ export function Onboarding() {
         />
       )}
 
-      {step === 'wallet-created' && passkeyCredentialId && (
+      {step === 'wallet-created' && passkeyCredentialId && username && (
         <WalletCreated
           passkeyCredentialId={passkeyCredentialId}
+          username={username}
           onWalletCreated={handleWalletCreated}
         />
       )}

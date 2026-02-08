@@ -2,22 +2,41 @@
 
 import { useEffect, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
+import { addSubname, formatSubname } from '@/lib/ens';
+import { storeENSName } from '@/utils/storage';
 import { Check, Copy, Loader2, X, ArrowRight, Lock } from 'lucide-react';
 
 interface WalletCreatedProps {
   passkeyCredentialId: string;
+  username: string;
   onWalletCreated: (address: string) => void;
 }
 
-export function WalletCreated({ passkeyCredentialId, onWalletCreated }: WalletCreatedProps) {
+export function WalletCreated({ passkeyCredentialId, username, onWalletCreated }: WalletCreatedProps) {
   const { address, isCreating, error, createWallet } = useWallet();
   const [copied, setCopied] = useState(false);
+  const [ensStatus, setEnsStatus] = useState<'idle' | 'registering' | 'success' | 'failed'>('idle');
 
   useEffect(() => {
     if (!address && !isCreating) {
       createWallet(passkeyCredentialId);
     }
   }, [passkeyCredentialId, address, isCreating, createWallet]);
+
+  useEffect(() => {
+    if (address && ensStatus === 'idle') {
+      setEnsStatus('registering');
+      addSubname(username, address).then((success) => {
+        if (success) {
+          const fullName = formatSubname(username);
+          storeENSName(fullName);
+          setEnsStatus('success');
+        } else {
+          setEnsStatus('failed');
+        }
+      });
+    }
+  }, [address, username, ensStatus]);
 
   const handleCopy = () => {
     if (address) {
@@ -77,6 +96,29 @@ export function WalletCreated({ passkeyCredentialId, onWalletCreated }: WalletCr
           </p>
         </div>
 
+        {/* ENS Name */}
+        <div className="rounded-xl bg-muted border border-border p-4 text-center">
+          <p className="text-xs text-muted-foreground mb-1">Your Identity</p>
+          <p className="text-lg font-semibold">{formatSubname(username)}</p>
+          <div className="mt-2 flex items-center justify-center gap-1.5">
+            {ensStatus === 'registering' && (
+              <>
+                <Loader2 className="h-3 w-3 text-muted-foreground spinner" />
+                <span className="text-xs text-muted-foreground">Registering on-chain...</span>
+              </>
+            )}
+            {ensStatus === 'success' && (
+              <>
+                <Check className="h-3 w-3 text-success" />
+                <span className="text-xs text-success">Registered</span>
+              </>
+            )}
+            {ensStatus === 'failed' && (
+              <span className="text-xs text-muted-foreground">ENS registration skipped</span>
+            )}
+          </div>
+        </div>
+
         {/* Address */}
         <div className="space-y-4">
           <div className="space-y-2">
@@ -96,7 +138,8 @@ export function WalletCreated({ passkeyCredentialId, onWalletCreated }: WalletCr
 
           <button
             onClick={() => address && onWalletCreated(address)}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-white text-black px-6 py-3 font-medium hover:bg-white/90 transition-colors"
+            disabled={ensStatus === 'registering'}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-white text-black px-6 py-3 font-medium hover:bg-white/90 disabled:opacity-40 transition-colors"
           >
             Continue
             <ArrowRight className="h-4 w-4" />

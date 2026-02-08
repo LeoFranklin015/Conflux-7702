@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   WALLET_ADDRESS: 'conflux_wallet_address',
   PASSKEY_CREDENTIAL_ID: 'conflux_passkey_id',
   AUTHORIZATION_SIGNATURE: 'conflux_auth_sig',
+  ENS_NAME: 'conflux_ens_name',
 } as const;
 
 export interface WalletStorage {
@@ -97,6 +98,24 @@ export function getAuthorizationSignature(): string | null {
 }
 
 /**
+ * Store ENS subname
+ */
+export function storeENSName(name: string): void {
+  if (typeof window === 'undefined') {
+    throw new Error('localStorage is not available');
+  }
+  localStorage.setItem(STORAGE_KEYS.ENS_NAME, name);
+}
+
+/**
+ * Get stored ENS subname
+ */
+export function getENSName(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(STORAGE_KEYS.ENS_NAME);
+}
+
+/**
  * Clear all wallet data (logout)
  */
 export function clearWallet(): void {
@@ -106,6 +125,7 @@ export function clearWallet(): void {
   localStorage.removeItem(STORAGE_KEYS.WALLET_ADDRESS);
   localStorage.removeItem(STORAGE_KEYS.PASSKEY_CREDENTIAL_ID);
   localStorage.removeItem(STORAGE_KEYS.AUTHORIZATION_SIGNATURE);
+  localStorage.removeItem(STORAGE_KEYS.ENS_NAME);
 }
 
 /**

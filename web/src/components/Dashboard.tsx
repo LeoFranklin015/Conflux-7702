@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
+import { getENSName } from '@/utils/storage';
 import { SendTokens } from './SendTokens';
 import { ManageSubscriptions } from './ManageSubscriptions';
 import {
@@ -18,6 +19,7 @@ export function Dashboard({ walletAddress }: DashboardProps) {
   const [copied, setCopied] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
   const [showSubscriptions, setShowSubscriptions] = useState(false);
+  const ensName = getENSName();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(walletAddress);
@@ -57,6 +59,10 @@ export function Dashboard({ walletAddress }: DashboardProps) {
             <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Wallet</span>
             <span className="text-xs text-muted-foreground">Conflux eSpace Testnet</span>
           </div>
+
+          {ensName && (
+            <p className="text-lg font-semibold">{ensName}</p>
+          )}
 
           <div className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
