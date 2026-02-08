@@ -5,7 +5,8 @@ import { useWallet } from '@/hooks/useWallet';
 import { parseUnits, isAddress, encodeFunctionData, type Address, type Hex } from 'viem';
 import { TESTNET_TOKENS, SMART_ACCOUNT_ADDRESS } from '@/lib/viem-client';
 import { RelayerClient, type Call } from '@/lib/relayer-client';
-import { X, Loader2, Check, ExternalLink, ArrowLeft } from 'lucide-react';
+import { QrScanner } from './QrScanner';
+import { X, Loader2, Check, ExternalLink, ArrowLeft, ScanLine } from 'lucide-react';
 
 interface SendTokensProps {
   walletAddress: string;
@@ -27,6 +28,7 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
   const [step, setStep] = useState<'form' | 'confirm' | 'sending' | 'success'>('form');
   const [txHash, setTxHash] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
 
   const tokens: { symbol: Token; name: string; decimals: number; address?: string }[] = [
     { symbol: 'CFX', name: 'Conflux', decimals: 18 },
@@ -217,13 +219,22 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-muted-foreground">Recipient</label>
-                <input
-                  type="text"
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  placeholder="0x..."
-                  className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/30 transition font-mono text-sm"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={recipient}
+                    onChange={(e) => setRecipient(e.target.value)}
+                    placeholder="0x..."
+                    className="flex-1 px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/30 transition font-mono text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowScanner(true)}
+                    className="shrink-0 h-[46px] w-[46px] rounded-xl bg-muted border border-border flex items-center justify-center hover:bg-accent transition-colors"
+                  >
+                    <ScanLine className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -369,6 +380,16 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
           )}
         </div>
       </div>
+
+      {showScanner && (
+        <QrScanner
+          onScan={(address) => {
+            setRecipient(address);
+            setShowScanner(false);
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </div>
   );
 }
