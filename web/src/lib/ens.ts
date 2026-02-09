@@ -86,6 +86,34 @@ export async function getPrimaryName(
   }
 }
 
+export async function resolveNameToAddress(
+  name: string
+): Promise<string | null> {
+  try {
+    // Normalize: if user types "alice", treat as "alice.conflux.eth"
+    const fullName = name.includes(".") ? name : `${name}.${CONFLUX_ENS_DOMAIN}`;
+    const justaName = await getJustaName();
+    const result = await justaName.subnames.getSubname({
+      subname: fullName,
+      chainId: CHAIN_ID,
+    });
+    // Look for ETH address (coin type 60)
+    const ethCoin = result?.records?.coins?.find(
+      (c: { id: number; value: string }) => c.id === 60
+    );
+    return ethCoin?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function formatSubname(username: string): string {
   return `${username}.${CONFLUX_ENS_DOMAIN}`;
+}
+
+export function looksLikeEns(input: string): boolean {
+  // Matches things like "alice", "alice.conflux.eth", "alice.eth"
+  // but not hex addresses
+  if (input.startsWith("0x")) return false;
+  return input.length >= 2 && /^[a-zA-Z0-9._-]+$/.test(input);
 }

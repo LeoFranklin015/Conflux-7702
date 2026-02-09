@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@/hooks/useWallet';
+import { useEnsResolve } from '@/hooks/useEnsResolve';
 import { parseUnits, formatUnits, isAddress, encodeFunctionData, type Address } from 'viem';
 import { TESTNET_TOKENS, SMART_ACCOUNT_ADDRESS, SMART_ACCOUNT_ABI } from '@/lib/viem-client';
 import { RelayerClient, type Call } from '@/lib/relayer-client';
@@ -27,12 +28,12 @@ interface ManageSubscriptionsProps {
 
 export function ManageSubscriptions({ walletAddress, onClose, inline }: ManageSubscriptionsProps) {
   const { signAndExecute, isSigning, error } = useWallet();
-
   const [view, setView] = useState<'list' | 'add' | 'revoking'>('list');
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [granteeAddress, setGranteeAddress] = useState('');
+  const { resolvedAddress: ensResolvedAddress, resolving: ensResolving, ensName, effectiveAddress: effectiveGrantee } = useEnsResolve(granteeAddress);
   const [granteeLabel, setGranteeLabel] = useState('');
   const [monthlyLimit, setMonthlyLimit] = useState('');
   const [perTxLimit, setPerTxLimit] = useState('');
@@ -113,7 +114,7 @@ export function ManageSubscriptions({ walletAddress, onClose, inline }: ManageSu
   };
 
   const handleGrantPermission = async () => {
-    if (!isAddress(granteeAddress)) { setFormError('Invalid grantee address'); return; }
+    if (!isAddress(effectiveGrantee)) { setFormError('Invalid grantee address'); return; }
     if (!monthlyLimit || parseFloat(monthlyLimit) <= 0) { setFormError('Monthly limit must be > 0'); return; }
     if (!perTxLimit || parseFloat(perTxLimit) <= 0) { setFormError('Per-tx limit must be > 0'); return; }
 
@@ -129,7 +130,7 @@ export function ManageSubscriptions({ walletAddress, onClose, inline }: ManageSu
         abi: SMART_ACCOUNT_ABI,
         functionName: 'grantPermission',
         args: [
-          granteeAddress as Address,
+          effectiveGrantee as Address,
           parseUnits(monthlyLimit, 18),
           parseUnits(perTxLimit, 18),
         ],
@@ -168,7 +169,7 @@ export function ManageSubscriptions({ walletAddress, onClose, inline }: ManageSu
 
       if (!result) throw new Error(error || 'Failed to grant permission');
       if (result.success) {
-        saveSubscription(granteeAddress, granteeLabel || `Service ${granteeAddress.slice(0, 8)}`);
+        saveSubscription(effectiveGrantee, granteeLabel || ensName || `Service ${effectiveGrantee.slice(0, 8)}`);
         setTxHash(result.txHash);
         setStep('success');
       } else {
@@ -377,9 +378,22 @@ export function ManageSubscriptions({ walletAddress, onClose, inline }: ManageSu
                     type="text"
                     value={granteeAddress}
                     onChange={(e) => setGranteeAddress(e.target.value)}
-                    placeholder="0x..."
+                    placeholder="0x... or ENS name"
                     className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/30 transition font-mono text-sm"
                   />
+                  {ensResolving && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Resolving ENS...
+                    </div>
+                  )}
+                  {ensResolvedAddress && (
+                    <div className="flex items-center gap-1.5 text-xs text-success">
+                      <Check className="h-3 w-3" /> {ensResolvedAddress.slice(0, 6)}...{ensResolvedAddress.slice(-4)}
+                    </div>
+                  )}
+                  {!ensResolving && !ensResolvedAddress && granteeAddress && !isAddress(granteeAddress) && !granteeAddress.startsWith('0x') && granteeAddress.length >= 2 && (
+                    <p className="text-xs text-muted-foreground">No address found for this name</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -432,7 +446,7 @@ export function ManageSubscriptions({ walletAddress, onClose, inline }: ManageSu
                 </button>
                 <button
                   onClick={() => {
-                    const err = !isAddress(granteeAddress)
+                    const err = !isAddress(effectiveGrantee)
                       ? 'Invalid address'
                       : !monthlyLimit || parseFloat(monthlyLimit) <= 0
                         ? 'Monthly limit required'
@@ -461,7 +475,10 @@ export function ManageSubscriptions({ walletAddress, onClose, inline }: ManageSu
                 </div>
                 <div className="flex justify-between items-start">
                   <span className="text-muted-foreground">Grantee</span>
-                  <span className="font-mono text-xs text-right break-all max-w-[200px]">{granteeAddress}</span>
+                  <div className="text-right">
+                    {ensName && <p className="text-xs font-medium text-success mb-0.5">{ensName}</p>}
+                    <span className="font-mono text-xs break-all max-w-[200px]">{effectiveGrantee}</span>
+                  </div>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Monthly Limit</span>

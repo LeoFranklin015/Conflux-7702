@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { parseUnits, isAddress, encodeFunctionData, type Address, type Hex } from 'viem';
 import { TESTNET_TOKENS, SMART_ACCOUNT_ADDRESS } from '@/lib/viem-client';
 import { RelayerClient, type Call } from '@/lib/relayer-client';
+import { resolveNameToAddress, looksLikeEns } from '@/lib/ens';
 import { QrScanner } from './QrScanner';
 import { X, Loader2, Check, ExternalLink, ArrowLeft, ScanLine } from 'lucide-react';
 
@@ -29,6 +30,39 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
   const [txHash, setTxHash] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const [ensName, setEnsName] = useState<string | null>(null);
+  const resolveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-resolve ENS names
+  useEffect(() => {
+    if (resolveTimeout.current) clearTimeout(resolveTimeout.current);
+    setResolvedAddress(null);
+    setEnsName(null);
+
+    if (!recipient || isAddress(recipient) || !looksLikeEns(recipient)) {
+      setResolving(false);
+      return;
+    }
+
+    setResolving(true);
+    resolveTimeout.current = setTimeout(async () => {
+      const address = await resolveNameToAddress(recipient);
+      setResolving(false);
+      if (address) {
+        setResolvedAddress(address);
+        setEnsName(recipient);
+      }
+    }, 500);
+
+    return () => {
+      if (resolveTimeout.current) clearTimeout(resolveTimeout.current);
+    };
+  }, [recipient]);
+
+  // Use resolved address if available, otherwise use raw input
+  const effectiveRecipient = resolvedAddress || recipient;
 
   const tokens: { symbol: Token; name: string; decimals: number; address?: string }[] = [
     { symbol: 'CFX', name: 'Conflux', decimals: 18 },
@@ -40,7 +74,8 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
 
   const validateForm = () => {
     if (!recipient) return 'Recipient address is required';
-    if (!isAddress(recipient)) return 'Invalid recipient address';
+    if (resolving) return 'Resolving ENS name...';
+    if (!isAddress(effectiveRecipient)) return 'Invalid recipient address';
     if (!amount || parseFloat(amount) <= 0) return 'Invalid amount';
     return null;
   };
@@ -74,7 +109,7 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
 
       if (selectedToken === 'CFX') {
         calls.push({
-          target: recipient as Address,
+          target: effectiveRecipient as Address,
           value: parseUnits(amount, selectedTokenInfo.decimals),
           data: '0x',
         });
@@ -92,7 +127,7 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
             stateMutability: 'nonpayable',
           }],
           functionName: 'transfer',
-          args: [recipient as Address, parseUnits(amount, selectedTokenInfo.decimals)],
+          args: [effectiveRecipient as Address, parseUnits(amount, selectedTokenInfo.decimals)],
         });
 
         calls.push({
@@ -224,8 +259,10 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
                     type="text"
                     value={recipient}
                     onChange={(e) => setRecipient(e.target.value)}
-                    placeholder="0x..."
-                    className="flex-1 px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/30 transition font-mono text-sm"
+                    placeholder="0x... or ENS name"
+                    className={`flex-1 px-4 py-3 rounded-xl bg-muted border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/30 transition text-sm ${
+                      resolvedAddress ? 'border-success/50' : 'border-border'
+                    } ${isAddress(recipient) ? 'font-mono' : ''}`}
                   />
                   <button
                     type="button"
@@ -235,6 +272,21 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
                     <ScanLine className="h-4 w-4 text-muted-foreground" />
                   </button>
                 </div>
+                {resolving && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Resolving ENS name...
+                  </div>
+                )}
+                {resolvedAddress && (
+                  <div className="flex items-center gap-1.5 text-xs text-success">
+                    <Check className="h-3 w-3" />
+                    <span className="font-mono">{resolvedAddress.slice(0, 6)}...{resolvedAddress.slice(-4)}</span>
+                  </div>
+                )}
+                {!resolving && !resolvedAddress && recipient && looksLikeEns(recipient) && recipient.length >= 3 && (
+                  <p className="text-xs text-muted-foreground">No address found for this name</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -297,7 +349,10 @@ export function SendTokens({ walletAddress, onClose, onSuccess }: SendTokensProp
                 </div>
                 <div className="border-t border-border pt-2 flex justify-between">
                   <span className="text-muted-foreground">To</span>
-                  <span className="font-mono text-xs text-right break-all max-w-[200px]">{recipient}</span>
+                  <div className="text-right max-w-[200px]">
+                    {ensName && <p className="text-xs font-medium mb-0.5">{ensName}</p>}
+                    <span className="font-mono text-xs break-all">{effectiveRecipient}</span>
+                  </div>
                 </div>
               </div>
 

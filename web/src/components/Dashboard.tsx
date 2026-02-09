@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useWallet } from '@/hooks/useWallet';
+import { useEnsResolve } from '@/hooks/useEnsResolve';
 import { getENSName } from '@/utils/storage';
 import { createConfluxPublicClient, TESTNET_TOKENS, SMART_ACCOUNT_ADDRESS, SMART_ACCOUNT_ABI } from '@/lib/viem-client';
 import { RelayerClient, type Call } from '@/lib/relayer-client';
 import { SendTokens } from './SendTokens';
 import { ManageSubscriptions } from './ManageSubscriptions';
-import { formatUnits, parseUnits, encodeFunctionData, type Address, erc20Abi } from 'viem';
+import { formatUnits, parseUnits, encodeFunctionData, isAddress, type Address, erc20Abi } from 'viem';
 import {
   Copy, Check, Send, Download,
   ShieldCheck, ExternalLink, Wallet, RefreshCw, Settings, Gift, Plus, Loader2,
@@ -336,6 +337,7 @@ function GiftCardsTab({ walletAddress }: { walletAddress: string }) {
   const [message, setMessage] = useState('');
   const [amount, setAmount] = useState('');
   const [recipientAddress, setRecipientAddress] = useState('');
+  const { resolvedAddress: ensResolvedAddress, resolving: ensResolving, ensName, effectiveAddress: effectiveRecipient } = useEnsResolve(recipientAddress);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -361,7 +363,7 @@ function GiftCardsTab({ walletAddress }: { walletAddress: string }) {
   const handleCreate = async () => {
     if (!to.trim()) { setFormError('Recipient name is required'); return; }
     if (!amount || parseFloat(amount) <= 0) { setFormError('Enter a valid amount'); return; }
-    if (!recipientAddress || !/^0x[a-fA-F0-9]{40}$/.test(recipientAddress)) { setFormError('Enter a valid wallet address'); return; }
+    if (!isAddress(effectiveRecipient)) { setFormError('Enter a valid wallet address or ENS name'); return; }
     setFormError(null);
 
     const card: GiftCard = {
@@ -371,7 +373,7 @@ function GiftCardsTab({ walletAddress }: { walletAddress: string }) {
       message: message.trim() || 'Enjoy this gift!',
       amount,
       token: 'USDC',
-      recipientAddress,
+      recipientAddress: effectiveRecipient,
       createdAt: new Date().toISOString(),
       status: 'granting',
     };
@@ -392,7 +394,7 @@ function GiftCardsTab({ walletAddress }: { walletAddress: string }) {
         abi: SMART_ACCOUNT_ABI,
         functionName: 'grantPermission',
         args: [
-          recipientAddress as Address,
+          effectiveRecipient as Address,
           parseUnits(amount, 18),
           parseUnits(amount, 18),
         ],
@@ -532,9 +534,22 @@ function GiftCardsTab({ walletAddress }: { walletAddress: string }) {
               type="text"
               value={recipientAddress}
               onChange={(e) => setRecipientAddress(e.target.value)}
-              placeholder="0x..."
+              placeholder="0x... or ENS name"
               className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/30 transition font-mono text-sm"
             />
+            {ensResolving && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" /> Resolving ENS...
+              </div>
+            )}
+            {ensResolvedAddress && (
+              <div className="flex items-center gap-1.5 text-xs text-success">
+                <Check className="h-3 w-3" /> {ensResolvedAddress.slice(0, 6)}...{ensResolvedAddress.slice(-4)}
+              </div>
+            )}
+            {!ensResolving && !ensResolvedAddress && recipientAddress && !isAddress(recipientAddress) && !recipientAddress.startsWith('0x') && recipientAddress.length >= 2 && (
+              <p className="text-xs text-muted-foreground">No address found for this name</p>
+            )}
           </div>
 
           <div className="rounded-xl bg-muted/50 border border-border/50 p-3">
